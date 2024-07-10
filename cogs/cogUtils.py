@@ -3,14 +3,21 @@ from discord import Interaction, app_commands, interactions
 from os import listdir
 from copy import deepcopy
 from pathlib import Path
+from json import load
 
 perma_cog_files = set([i for i in listdir("./cogs") if i.endswith('.py')])
 perma_cog_files.discard("cogUtils.py")
+perma_cog_files.discard("MainCommands.py")
 current_cog_files = deepcopy(perma_cog_files)
+
+with open("secrets.json","r") as f:
+    loaded = load(f)
+    dev = loaded["dev_id"] or ""
+    dev_guild = loaded["dev_guild_id"]
 
 
 def is_dev(itxn: Interaction):
-    return itxn.user.id == 425748749462274048
+    return itxn.user.id == dev
 
 class cogUtils(commands.Cog):
 
@@ -20,15 +27,17 @@ class cogUtils(commands.Cog):
 
     @app_commands.command(description="Shut the bot down")
     @app_commands.check(is_dev)
+    @app_commands.guilds(dev_guild)
     async def kill(self, itxn: interactions.Interaction):
         await itxn.response.send_message("Bot is promptly dying...")
-        print(f"Bot killed by {itxn.message.author.global_name}")
+        print(f"[cogUtils]: Bot killed by {itxn.message.author.global_name}")
         await self.bot.close()
 
 
     @app_commands.command(description="Attempts to load a cog, given it's filename, and register it")
     @app_commands.check(is_dev)
     @app_commands.describe(filename="The filename of the cog to attempt to import and register")
+    @app_commands.guilds(dev_guild)
     async def register(self, itxn: interactions.Interaction, filename: str) -> None:
         global perma_cog_files,current_cog_files
         if Path(filename).exists():
@@ -42,7 +51,7 @@ class cogUtils(commands.Cog):
                 current_cog_files.add(filename)
                 await itxn.response.send_message(f'cogs.{filename} has already been loaded.',ephemeral=True)
             except Exception as ex:
-                print(f'cogUtils.register({filename}) error: {ex}')
+                print(f'[cogUtils]: cogUtils.register({filename}) error: {ex}')
                 await itxn.response.send_message(f'Error: {ex}',ephemeral=True)
         else:
             await itxn.response.send_message(f'cogs.{filename} does not exist.',ephemeral=True)
@@ -53,11 +62,12 @@ class cogUtils(commands.Cog):
     @app_commands.check(is_dev)
     @app_commands.describe(extension="The name of the cog's filename to attempt to load")
     @app_commands.choices(extension=[app_commands.Choice(name=cog,value=cog) for cog in perma_cog_files]+[app_commands.Choice(name="all",value="all")])
+    @app_commands.guilds(dev_guild)
     async def load(self, itxn: interactions.Interaction, extension: app_commands.Choice[str]) -> None:
         #doesn't let you import a new cog that has been added since starting the bot?
         global current_cog_files
         diff = perma_cog_files.difference(current_cog_files)
-        
+
         if extension.name == "all":
             extension = diff
         elif not extension.name in perma_cog_files:
@@ -68,7 +78,7 @@ class cogUtils(commands.Cog):
 
         for ext in extension:
             try:
-                print(f"Trying to load {ext}")
+                print(f"[cogUtils]: Trying to load {ext}")
                 await self.bot.load_extension(f'cogs.{ext[:-3]}')
                 await itxn.response.send_message(f'{ext} Loaded.',ephemeral=True)
                 current_cog_files.add(str(ext))
@@ -76,7 +86,7 @@ class cogUtils(commands.Cog):
                 await itxn.response.send_message(f'{ext} is already loaded.',ephemeral=True)
                 current_cog_files.add(str(ext))
             except Exception as ex:
-                print(f'cogUtils.load({ext}) error: {ex}')
+                print(f'[cogUtils]: cogUtils.load({ext}) error: {ex}')
                 await itxn.response.send_message(f'Error: {ex}',ephemeral=True)
         return None
 
@@ -85,6 +95,7 @@ class cogUtils(commands.Cog):
     @app_commands.check(is_dev)
     @app_commands.describe(extension="The name of the cog's filename to attempt to unload")
     @app_commands.choices(extension=[app_commands.Choice(name=cog,value=cog) for cog in current_cog_files]+[app_commands.Choice(name="all",value="all")])
+    @app_commands.guilds(dev_guild)
     async def unload(self, itxn: interactions.Interaction, extension: app_commands.Choice[str]) -> None:
         global current_cog_files
 
@@ -98,7 +109,7 @@ class cogUtils(commands.Cog):
 
         for ext in extension:
             try:
-                print(f"Trying to unload {ext}")
+                print(f"[cogUtils]: Trying to unload {ext}")
                 await self.bot.unload_extension(f'cogs.{ext[:-3]}')
                 await itxn.response.send_message(f'{ext} Unloaded.',ephemeral=True)
                 current_cog_files.discard(str(ext))
@@ -106,7 +117,7 @@ class cogUtils(commands.Cog):
                 await itxn.response.send_message(f'{ext} is already unloaded.',ephemeral=True)
                 current_cog_files.discard(str(ext))
             except Exception as ex:
-                print(f'cogUtils.unload({ext}) error: {ex}')
+                print(f'[cogUtils]: cogUtils.unload({ext}) error: {ex}')
                 await itxn.response.send_message(f'Error: {ex}',ephemeral=True)
         return None
 
@@ -115,6 +126,7 @@ class cogUtils(commands.Cog):
     @app_commands.check(is_dev)
     @app_commands.describe(extension="The name of the cog/s' filename/s to attempt to reload")
     @app_commands.choices(extension=[app_commands.Choice(name=cog,value=cog) for cog in current_cog_files]+[app_commands.Choice(name="current",value="all")]+[app_commands.Choice(name="all",value="all")])
+    @app_commands.guilds(dev_guild)
     async def reload(self, itxn: interactions.Interaction, extension: app_commands.Choice[str]) -> None:
         global current_cog_files
 
@@ -133,35 +145,35 @@ class cogUtils(commands.Cog):
         for cog in unloads:
             if not Path(f"cogs/{cog}").exists():
                 string += f"cogs.{cog} does not exist\n"
-                print(f"cogs.{cog} does not exist")
+                print(f"[cogUtils]: cogs.{cog} does not exist")
                 continue
             try:
-                print(f"Trying to unload {cog}")
+                print(f"[cogUtils]: Trying to unload {cog}")
                 await self.bot.unload_extension(f'cogs.{cog[:-3]}')
                 string += f"cogs.{cog} unloaded\n"
-                print(f"cogs.{cog} unloaded")
+                print(f"[cogUtils]: cogs.{cog} unloaded")
             except commands.ExtensionNotLoaded:
                 string += f"cogs.{cog} already unloaded\n"
-                print(f"cogs.{cog} already unloaded")
+                print(f"[cogUtils]: cogs.{cog} already unloaded")
             except Exception as ex:
                 string += f"Error while trying to unload cogs.{cog}: {ex}\n"
-                print(f"Error while trying to unload cogs.{cog}: {ex}")
+                print(f"[cogUtils]: Error while trying to unload cogs.{cog}: {ex}")
         for cog in loads:
             if not Path(f"cogs/{cog}").exists():
                 string += f"cogs.{cog} does not exist\n"
-                print(f"cogs.{cog} does not exist")
+                print(f"[cogUtils]: cogs.{cog} does not exist")
                 continue
             try:
-                print(f"Trying to load {cog}")
+                print(f"[cogUtils]: Trying to load {cog}")
                 await self.bot.load_extension(f'cogs.{cog[:-3]}')
                 string += f"cogs.{cog} loaded\n"
-                print(f"cogs.{cog} loaded")
+                print(f"[cogUtils]: cogs.{cog} loaded")
             except commands.ExtensionAlreadyLoaded:
                 string += f"cogs.{cog} already loaded\n"
                 print(f"cogs.{cog} already loaded")
             except Exception as ex:
                 string += f"Error while trying to load cogs.{cog}: {ex}\n"
-                print(f"Error while trying to load cogs.{cog}: {ex}")
+                print(f"[cogUtils]: Error while trying to load cogs.{cog}: {ex}")
         
         await itxn.response.send_message(string,ephemeral=True)
         return None
@@ -170,8 +182,8 @@ class cogUtils(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        print(f"[modUtils]: perma_cog_files={perma_cog_files}\n[modUtils]: current_cog_files={current_cog_files}")
-        print("cogUtils cog ready!")
+        print(f"[cogUtils]: perma_cog_files={perma_cog_files}\n[cogUtils]: current_cog_files={current_cog_files}")
+        print("[cogUtils]: cogUtils cog ready!")
 
 
 async def setup(bot):

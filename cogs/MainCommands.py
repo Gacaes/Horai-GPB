@@ -1,10 +1,14 @@
 from discord.ext import commands
 from discord import Interaction, app_commands, interactions
+from json import load
 
-
+with open("secrets.json","r") as f:
+    loaded = load(f)
+    dev = loaded["dev_id"] or ""
+    dev_guild = loaded["dev_guild_id"]
 
 def is_dev(itxn: Interaction):
-    return itxn.user.id == 425748749462274048
+    return itxn.user.id == dev
 
 class MainCommands(commands.Cog):
 
@@ -25,7 +29,7 @@ class MainCommands(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        print("MainCommands cog ready!")
+        print("[MainCommands]: MainCommands cog ready!")
 
 
 async def setup(bot):

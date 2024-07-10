@@ -56,7 +56,8 @@ async def main():
 #if program run as the main file instead of imported
 if __name__ == "__main__":
     try:
-        token = load(open("secrets.json","r"))["TOKEN"] or ""
+        with open("secrets.json","r") as f:
+            token = load(f)["TOKEN"] or ""
         #load the secret from JSON
         if token == "":
             raise Exception("TOKEN not found in secrets.json .")
