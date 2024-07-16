@@ -1,5 +1,5 @@
 from discord.ext import commands
-from discord import Interaction, app_commands, interactions
+from discord import Interaction, app_commands, interactions, Object
 from os import listdir
 from copy import deepcopy
 from pathlib import Path
@@ -13,7 +13,7 @@ current_cog_files = deepcopy(perma_cog_files)
 with open("secrets.json","r") as f:
     loaded = load(f)
     dev = loaded["dev_id"] or ""
-    dev_guild = loaded["dev_guild_id"]
+    dev_guild = Object(id=int(loaded["dev_guild_id"]))
 
 
 def is_dev(itxn: Interaction):
@@ -126,7 +126,7 @@ class cogUtils(commands.Cog):
     @app_commands.check(is_dev)
     @app_commands.describe(extension="The name of the cog/s' filename/s to attempt to reload")
     @app_commands.choices(extension=[app_commands.Choice(name=cog,value=cog) for cog in current_cog_files]+[app_commands.Choice(name="current",value="all")]+[app_commands.Choice(name="all",value="all")])
-    @app_commands.guilds(dev_guild)
+    #@app_commands.guilds(dev_guild)
     async def reload(self, itxn: interactions.Interaction, extension: app_commands.Choice[str]) -> None:
         global current_cog_files
 
