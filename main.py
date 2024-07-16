@@ -2,9 +2,9 @@ import asyncio
 import discord
 from discord.ext import commands
 from json import load
-from time import time
-from os import listdir
-from time import time
+#from time import time
+from os import listdir, environ
+from pathlib import Path
 
 intents = discord.Intents.all()
 intents.members = True
@@ -42,13 +42,19 @@ async def main():
 #if program run as the main file instead of imported
 if __name__ == "__main__":
     try:
-        with open("secrets.json","r") as f:
-            token = load(f)["TOKEN"] or ""
-        #load the secret from JSON
+        if Path("secrets.json").exists():
+            with open("secrets.json","r") as f:
+                #load the secret from JSON
+                token = load(f)["TOKEN"] or ""
+        else:
+            #try to get tokens from env vars
+            token = environ.get("TOKEN", "")
+
         if token == "":
-            raise Exception("TOKEN not found in secrets.json .")
-        asyncio.run(main())
+            raise Exception("TOKEN not found in secrets.json or environment vars.")
+        
         #run the bot
+        asyncio.run(main())
     
     except discord.HTTPException as e:
         if e.status == 429:

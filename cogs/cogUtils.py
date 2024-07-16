@@ -1,6 +1,6 @@
 from discord.ext import commands
 from discord import Interaction, app_commands, interactions, Object
-from os import listdir
+from os import listdir,environ
 from copy import deepcopy
 from pathlib import Path
 from json import load
@@ -10,10 +10,17 @@ perma_cog_files.discard("cogUtils.py")
 perma_cog_files.discard("MainCommands.py")
 current_cog_files = deepcopy(perma_cog_files)
 
-with open("secrets.json","r") as f:
-    loaded = load(f)
-    dev = loaded["dev_id"] or ""
-    dev_guild = Object(id=int(loaded["dev_guild_id"]))
+if Path("secrets.json").exists():
+    with open("secrets.json","r") as f:
+        loaded = load(f)
+        dev = loaded["dev_id"] or ""
+        dev_guild = Object(id=775899147915231263) or ""
+else:
+    dev = environ.get("dev_id","")
+    dev_guild = Object(id=int(environ.get("dev_guild_id","")))
+
+if "" in [dev, dev_guild]:
+    raise Exception("Unable to load variables from secrets.json or environment variables")
 
 
 def is_dev(itxn: Interaction):
@@ -25,9 +32,9 @@ class cogUtils(commands.Cog):
         self.bot: commands.Bot = bot
 
 
-    @app_commands.command(description="Shut the bot down")
-    @app_commands.check(is_dev)
-    @app_commands.guilds(dev_guild)
+    #@app_commands.command(description="Shut the bot down")
+    #@app_commands.check(is_dev)
+    #@app_commands.guilds(dev_guild)
     async def kill(self, itxn: interactions.Interaction):
         await itxn.response.send_message("Bot is promptly dying...")
         print(f"[cogUtils]: Bot killed by {itxn.message.author.global_name}")

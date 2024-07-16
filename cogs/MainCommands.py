@@ -1,11 +1,20 @@
 from discord.ext import commands
 from discord import Interaction, app_commands, interactions, Object
 from json import load
+from os import environ
+from pathlib import Path
 
-with open("secrets.json","r") as f:
-    loaded = load(f)
-    dev = loaded["dev_id"] or ""
-    dev_guild = Object(id=int(loaded["dev_guild_id"]))
+if Path("secrets.json").exists():
+    with open("secrets.json","r") as f:
+        loaded = load(f)
+        dev = loaded["dev_id"] or ""
+        dev_guild = Object(id=int(loaded["dev_guild_id"])) or ""
+else:
+    dev = environ.get("dev_id","")
+    dev_guild = Object(id=int(environ.get("dev_guild_id","")))
+
+if "" in [dev, dev_guild]:
+    raise Exception("Unable to load variables from secrets.json or environment variables")
 
 def is_dev(itxn: Interaction):
     return itxn.user.id == dev
