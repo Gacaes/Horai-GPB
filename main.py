@@ -12,7 +12,7 @@ intents.message_content = True
 db = {}
 
 #create the bot
-bot = commands.Bot(command_prefix='.', description="A general-purpose discord bot for Horai by Delta", intents=intents)
+bot = commands.Bot(command_prefix='£', description="A general-purpose discord bot for Horai by Delta", intents=intents)
 
 def is_dev(ctx):
     async def predicate(ctx):

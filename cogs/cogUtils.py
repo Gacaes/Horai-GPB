@@ -16,7 +16,8 @@ if Path("secrets.json").exists():
         dev = loaded["dev_id"] or ""
         dev_guild = Object(id=775899147915231263) or ""
 else:
-    dev = environ.get("dev_id","")
+    dev = environ.get("dev_id")
+    dev = int(dev) if not dev in None else ""
     dev_guild = Object(id=int(environ.get("dev_guild_id","")))
 
 if "" in [dev, dev_guild]:
