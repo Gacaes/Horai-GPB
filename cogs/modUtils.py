@@ -5,7 +5,7 @@ from tinydb import TinyDB,Query
 from os import listdir,mkdir,environ
 from json import load
 from pathlib import Path
-from time import time
+from time import time,sleep
 
 if Path("secrets.json").exists():
     with open("secrets.json","r") as f:
@@ -14,7 +14,7 @@ if Path("secrets.json").exists():
         dev_guild = Object(id=int(loaded["dev_guild_id"])) or ""
 else:
     dev = environ.get("dev_id","")
-    dev = int(dev) if not dev in None else ""
+    dev = int(dev) if not dev is None else ""
     dev_guild = Object(id=int(environ.get("dev_guild_id","")))
 
 if "" in [dev, dev_guild]:
@@ -28,17 +28,22 @@ class whitelist:
         #print(f"{itxn.user.global_name} is trying to run a whitelist protected command called {itxn.command.name}")
         whitelisted = await viewDB(itxn=itxn, item="notice_role")
         whitelisted = [i["value"] for i in whitelisted]
+        #print("user roles=",itxn.user.roles)
+        #print("whitelisted roles=",whitelisted,type(whitelisted[0]))
         for role in itxn.user.roles:
-            if str(role.id) in whitelisted:
+            if role.id in whitelisted:
                 return True
-        await itxn.response.send_message(content="You do not have permission to use this command. If you believe there is an issue, contact your server admin/s or the dev.", ephemeral=True)
+        await itxn.response.send_message(content="You are not whitelisted to be able to use this command. If you believe there is an issue, contact your server admin/s.", ephemeral=True)
         return False
 
 def has_whitelist():
     return app_commands.check(whitelist.extended_check)
 
-def is_dev(itxn: Interaction):
-    return itxn.user.id == dev
+def is_dev(itxn: Interaction | commands.Context):
+    if isinstance(itxn, Interaction):
+        return itxn.user.id == dev
+    else:
+        return itxn.author.id == dev
 
 async def check_db(itxn:interactions.Interaction) -> bool:
     global db
@@ -56,6 +61,7 @@ async def check_db(itxn:interactions.Interaction) -> bool:
 async def addDB(itxn:interactions.Interaction, item: str, value: str) -> bool:
     global db
     guild_id = str(itxn.guild.id)
+    await check_db(itxn=itxn)
     try:
         temp = db[guild_id]["main"].search(query.type == item and query.value == value)
         if temp:
@@ -72,8 +78,8 @@ async def addDB(itxn:interactions.Interaction, item: str, value: str) -> bool:
 async def remDB(itxn:interactions.Interaction, item: str, value: str = "") -> bool:
     global db
     guild_id = str(itxn.guild.id)
-    checker = await check_db(itxn=itxn)
-    if not checker:
+    exists = await check_db(itxn=itxn)
+    if not exists:
         return False
     
     if value == "":
@@ -91,6 +97,9 @@ async def remDB(itxn:interactions.Interaction, item: str, value: str = "") -> bo
 
 async def viewDB(itxn:interactions.Interaction, item: str | list[str] = "", value: str | list[str] = "") -> list:
     global db
+    exists = await check_db(itxn=itxn)
+    if not exists:
+        return []
     if not (item or value):
         #print("logic")
         #print("[viewDB]: KeyError")
@@ -101,13 +110,6 @@ async def viewDB(itxn:interactions.Interaction, item: str | list[str] = "", valu
     if type(value) is str:
         value = [value]
     guild_id = str(itxn.guild.id)
-    try:
-        #check if the guild has a DB
-        db[guild_id]["main"]
-    except KeyError:
-        #if the guild doesn't have a DB, create one and return an empty list
-        db[guild_id]["main"] = TinyDB(f"DBs/{guild_id}.json")
-        return []
     
     gets = []
     for i in item:
@@ -142,6 +144,9 @@ async def User_add(itxn:interactions.Interaction, user_id: int, item: str, value
 async def User_view(itxn:interactions.Interaction, user_id:int, item: str | list[str] = "", value: str | list[str] = "") -> list:
     global db
     guild_id = str(itxn.guild.id)
+    exists = await check_User(itxn=itxn, user_id=user_id)
+    if not exists:
+        return []
     if not (item or value):
         #print("user logic")
         #print("[viewDB]: KeyError")
@@ -151,10 +156,6 @@ async def User_view(itxn:interactions.Interaction, user_id:int, item: str | list
         item = [item]
     if type(value) is str:
         value = [value]
-    #print(2)
-    await check_User(itxn=itxn, user_id=user_id)
-    #print(await check_User(itxn=itxn, user_id=user_id))
-    #print("user checked")
     
     gets = []
     for i in item:
@@ -250,81 +251,69 @@ class modUtils(commands.Cog):
             return None
 
     @group.command(description="Create a notice")
-    @app_commands.describe(user="The user/s the notice is with regards to",reason="The reason given for the notice (optional, default=None)",channel="The channel/s to send the notice to",notify="Whether to notify the user/s in question (optional, default=False)",dm="If 'notify' is True, 'dm' will determine whether to send the user/s the notice in their DMs or in this current channel (optional, default=False)")
-    #@has_whitelist()
+    @app_commands.describe(user="The user the notice is with regards to",reason="The reason given for the notice (optional, default=None)",channel="The channes to send the notice to",notify="Whether to notify the user/s in question (optional, default=False)",dm="If True, send the user the notice in their DMs (optional, default=False)")
+    @has_whitelist()
     async def create(self, itxn:interactions.Interaction, user: Member, channel: TextChannel, reason: str = "", notify: bool = False, dm: bool = False) -> None:
         #perms = [i["value"] for i in await viewDB(itxn, item="notice_role")]
         #role_ids = [str(i.id) for i in itxn.user.roles]
-        if await whitelist.extended_check(itxn):
-            #if the user has a role in the whitelist to be able to run this command
 
-            current_user_notices = await User_view(itxn=itxn, user_id=user.id, item="notice")
-            total = len(current_user_notices)
-            new_reason = reason if reason else '(None given)'
-            new_notify = '(None)' if not notify else 'DM' if dm else '<#'+str(itxn.channel_id)+'>'
-            timestamp = int(time())
+        current_user_notices = await User_view(itxn=itxn, user_id=user.id, item="notice")
+        total = len(current_user_notices)
+        new_reason = reason if reason else '(None given)'
+        new_notify = '(None)' if not notify else 'DM' if dm else '<#'+str(itxn.channel_id)+'>'
+        timestamp = int(time())
 
-            embed = Embed()
-            embed.title = f"Notice"
-            embed.color = 0xFFFF00 #yellow
-            embed.set_author(name=itxn.user.global_name,icon_url=itxn.user.avatar.url) #the user who executed the command
-            embed.add_field(name="Details",value=f"User: {user.mention}\nUser ID: {user.id}\nReason: {new_reason}\nNotified by: <@{itxn.user.id}>")
+        embed = Embed()
+        embed.title = f"Notice"
+        embed.color = 0xFFFF00 #yellow
+        embed.set_author(name=itxn.user.global_name,icon_url=itxn.user.avatar.url) #the user who executed the command
+        embed.add_field(name="Details",value=f"User: {user.mention}\nUser ID: {user.id}\nReason: {new_reason}\nNotified by: <@{itxn.user.id}>")
 
-            if notify:
-                if dm:
-                    if user.dm_channel:
-                        sent = await user.dm_channel.send(content=f"{user.mention}, you are being served a notice:",embed=embed)
-                    else:
-                        dm:DMChannel = await user.create_dm()
-                        sent = await dm.send(content=f"{user.mention}, you are being served a notice:",embed=embed)
-                else:
-                    sent = await itxn.channel.send(content=f"{user.mention}, you are being served a notice:",embed=embed)
+        if notify:
+            sent = await itxn.channel.send(content=f"{user.mention}, you are being served a notice:",embed=embed)
+        if dm:
+            if user.dm_channel:
+                sent = await user.dm_channel.send(content=f"{user.mention}, you are being served a notice:",embed=embed)
             else:
-                sent = None
+                dm:DMChannel = await user.create_dm()
+                sent = await dm.send(content=f"{user.mention}, you are being served a notice:",embed=embed)
+        if not (notify or dm):
+            sent = None
 
-            embed.add_field(name="Extra details",value=f"\nNotice given: {notify}\nChannel notified: {new_notify}\nTotal notices: {total}\nNotice Link: {sent.to_reference().jump_url if not sent is None else '(User was not notified)'}\nTimestamp: <t:{timestamp}:F>")
-            mod = await channel.send(embed=embed)
+        embed.add_field(name="Extra details",value=f"\nNotice given: {notify}\nChannel notified: {new_notify}\nTotal notices: {total}\nNotice Link: {sent.to_reference().jump_url if not sent is None else '(User was not notified)'}\nTimestamp: <t:{timestamp}:F>")
+        mod = await channel.send(embed=embed)
 
-            notice_data = {"id":int(total), "reason":new_reason, "notified":notify, "channel":new_notify, "mod_channel":channel.id, "by":itxn.user.id, "time":timestamp, "user_notice_id":sent.id if not sent is None else None, "mod_notice_id":mod.id,"prev_reason":None,"edited_timestamp":None}
-            await User_add(itxn=itxn,user_id=user.id,item="notice",value=notice_data)
+        notice_data = {"id":int(total), "reason":new_reason, "notified":notify, "channel":new_notify, "mod_channel":channel.id, "by":itxn.user.id, "time":timestamp, "user_notice_id":sent.id if not sent is None else None, "mod_notice_id":mod.id,"prev_reason":None,"edited_timestamp":None}
+        await User_add(itxn=itxn,user_id=user.id,item="notice",value=notice_data)
 
-            await itxn.response.send_message(content="Notice/s sent",ephemeral=True)
-        else:
-            #the user is not whitelisted
-            await itxn.response.send_message("You do not have permission to use this command. If you believe there is an issue, contact your server admin/s or the dev.",ephemeral=True)
+        await itxn.response.send_message(content="Notice/s sent",ephemeral=True)
         return None
 
     @group.command(description="Connect two users together as aliases")
     @app_commands.describe(user="The user to add an alias to",user_alias="The alias of the user")
+    @has_whitelist()
     async def alias(self, itxn:interactions.Interaction, user: Member, user_alias: Member) -> None:
         #perms = [i["value"] for i in await viewDB(itxn, item="notice_role")]
         #role_ids = [str(i.id) for i in itxn.user.roles]
-        if await whitelist.extended_check(itxn):
-            current_user_aliases_list: list[dict] = await User_view(itxn=itxn, user_id=user.id, item="alias")
-            current_alias_aliases_list: list[dict] = await User_view(itxn=itxn, user_id=user_alias.id, item="alias")
-            await User_add(itxn=itxn, user_id=user.id, item="alias", value=user_alias.id)
-            await User_add(itxn=itxn, user_id=user_alias.id, item="alias", value=user.id)
-            #print(await User_view(itxn=itxn,user_id=user.id,item="alias"))
-            #await itxn.response.send_message(content="WIP")
-            #return None
-            for alias in current_user_aliases_list:
-                await User_add(itxn=itxn, user_id=alias["value"], item="alias", value=user_alias.id)
-            for alias in current_alias_aliases_list:
-                await User_add(itxn=itxn, user_id=alias["value"], item="alias", value=user.id)
-            await itxn.response.send_message(content="Aliases connected")
-        else:
-            #the user is not whitelisted
-            await itxn.response.send_message(content="You do not have permission to use this command. If you believe there is an issue, contact your server admin/s or the dev.",ephemeral=True)
+        current_user_aliases_list: list[dict] = await User_view(itxn=itxn, user_id=user.id, item="alias")
+        current_alias_aliases_list: list[dict] = await User_view(itxn=itxn, user_id=user_alias.id, item="alias")
+        await User_add(itxn=itxn, user_id=user.id, item="alias", value=user_alias.id)
+        await User_add(itxn=itxn, user_id=user_alias.id, item="alias", value=user.id)
+        #print(await User_view(itxn=itxn,user_id=user.id,item="alias"))
+        #await itxn.response.send_message(content="WIP")
+        #return None
+        for alias in current_user_aliases_list:
+            await User_add(itxn=itxn, user_id=alias["value"], item="alias", value=user_alias.id)
+        for alias in current_alias_aliases_list:
+            await User_add(itxn=itxn, user_id=alias["value"], item="alias", value=user.id)
+        await itxn.response.send_message(content="Aliases connected")
         return None
 
     @group.command(description="View a user's notices (Requires you to have a whitelisted role)")
     @app_commands.describe(user="The user whose notices to view and their associated aliases", page="The page number of notices to display")
+    @has_whitelist()
     async def view(self, itxn: interactions.Interaction, user: Member, page: int = 1) -> None:
         #notice_data = {"id":int(total), "reason":new_reason, "notified":notify, "channel":new_notify, "by":itxn.user.id, "time":timestamp}
-
-        if not await whitelist.extended_check(itxn):
-            await itxn.response.send_message(content="You do not have permission to use this command. If you believe there is an issue, contact your server admin/s or the dev.", ephemeral=True)
-            return None
 
         embed = Embed(colour=0xFFFF00, title=f"{user.global_name}'s notices")
         embed.set_author(name=user.global_name,icon_url=user.avatar.url)
@@ -344,7 +333,7 @@ class modUtils(commands.Cog):
         else:
             embed.add_field(name="User notices:",value="(None to show)")
         aliases = await User_view(itxn=itxn, user_id=user.id, item="alias")
-        print("aliases=",aliases)
+        #print("aliases=",aliases)
         embed.add_field(name="Aliases",value=", ".join([f'{i["value"]} : <@{i["value"]}>' for i in aliases]) if aliases else "(No associated aliases to show)",inline=False)
         embed.set_footer(text=f"Page {page+1} of {pages if pages else 1}")
         
@@ -382,10 +371,8 @@ class modUtils(commands.Cog):
 
     @group.command(description="Edit a user's notice given the user's notice's ID")
     @app_commands.describe(user="The user whose notice you want to edit",new_reason="The new reason you want to change the notice to",notice_id="The notice ID that you want to edit (defaults to the last notice given)")
+    @has_whitelist()
     async def edit(self, itxn: interactions.Interaction, user: Member, new_reason: str, notice_id: int = -1) -> None:
-        if not await whitelist.extended_check(itxn):
-            await itxn.response.send_message(content="You do not have permission to use this command. If you believe there is an issue, contact your server admin/s or the dev.", ephemeral=True)
-            return None
         
         notices = await User_view(itxn=itxn, user_id=user.id, item="notice")
         if not notices:
@@ -437,9 +424,6 @@ class modUtils(commands.Cog):
     @app_commands.describe(user="The user whose notice you want to edit",notice_id="The notice ID that you want to edit (defaults to the last notice given)")
     @has_whitelist()
     async def remove(self, itxn: interactions.Interaction, user: Member, notice_id: int = -1) -> None:
-        #if not await whitelist.extended_check(itxn):
-        #    await itxn.response.send_message(content="You do not have permission to use this command. If you believe there is an issue, contact your server admin/s or the dev.", ephemeral=True)
-        #    return None
         
         notices = await User_view(itxn=itxn, user_id=user.id, item="notice")
         if not notices:
@@ -462,6 +446,42 @@ class modUtils(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print("[modUtils.py]: modUtils cog ready!")
+
+    @commands.Cog.listener()
+    async def on_message(self, message: Message) -> None:
+        if not message.author.id == 302050872383242240:
+            return None
+        print("\non_msg")
+        if message.interaction is not None:
+            print("name=",message.interaction.name)
+            print(message.interaction.__repr__())
+        print("content=",message.content)
+        print("embeds=",message.embeds)
+    
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: Message, after: Message) -> None:
+        if not after.author.id == 302050872383242240:
+            return None
+        print("\nmsg_edit")
+        embeds: list[Embed] = after.embeds
+        if after.interaction is not None:
+            print("name=",after.interaction.name)
+            print(after.interaction.__repr__())
+        print("content=",after.content)
+        #print("embeds=",embeds)
+        if embeds:
+            print("embed details:")
+            print(embeds[0].title)
+            print(embeds[0].to_dict())
+            print(embeds[0].fields)
+    
+    #@commands.Cog.listener()
+    async def on_interaction(self, itxn: interactions.Interaction):
+        # only this bot's interactions
+        print()
+        print("itxn=",itxn.data)
+        print("orig resp=",await itxn.original_response())
+
 
 
 async def setup(bot):
